@@ -2,9 +2,8 @@ package org.darmokhval.tasks7;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.util.Arrays;
+import java.util.*;
 import java.util.Comparator;
-import java.util.Iterator;
 
 public abstract class Deposit implements Comparable<Deposit>{
     protected BigDecimal amount;
@@ -15,19 +14,25 @@ public abstract class Deposit implements Comparable<Deposit>{
     }
     public abstract BigDecimal income();
     public abstract BigDecimal getFinalDepositAmount();
+    public abstract boolean canToProlong();
+
+    public int compareTo(Deposit deposit) {
+        return getFinalDepositAmount().compareTo(deposit.getFinalDepositAmount());
+    }
 
     public static void main(String[] args) {
-        BaseDeposit b1 = new BaseDeposit(new BigDecimal("1000"), 3);
+        BaseDeposit b1 = new BaseDeposit(new BigDecimal("3000"), 3);
         //System.out.println(b1.income());
-        SpecialDeposit b2 = new SpecialDeposit(new BigDecimal("1000"), 2);
+        SpecialDeposit b2 = new SpecialDeposit(new BigDecimal("2000"), 2);
         //System.out.println(b2.income());
-        LongDeposit b3 = new LongDeposit(new BigDecimal("1000"), 30);
+        LongDeposit b3 = new LongDeposit(new BigDecimal("1000"), 8);
         //System.out.println(b3.income());
         Client bob = new Client();
         bob.addDeposit(new BaseDeposit(new BigDecimal("100"), 12));
-        bob.addDeposit(new BaseDeposit(new BigDecimal("200"), 12));
-        bob.addDeposit(new BaseDeposit(new BigDecimal("300"), 12));
+
+        bob.addDeposit(new SpecialDeposit(new BigDecimal("2000"), 12));
         bob.addDeposit(new BaseDeposit(new BigDecimal("400"), 12));
+        bob.addDeposit(new BaseDeposit(new BigDecimal("400"), 19));
         bob.addDeposit(b1);
         bob.addDeposit(b2);
         bob.addDeposit(b3);
@@ -40,9 +45,11 @@ public abstract class Deposit implements Comparable<Deposit>{
         System.out.println(b3.getFinalDepositAmount());
         System.out.println(b3.income());
         bob.sortDeposit();
-        /*for(Deposit d: bob) {
-
-        }*/
+        for(Deposit d: bob) {
+            if (d != null) System.out.println(d.amount + " " + d.period + " " + d.getFinalDepositAmount());
+        }
+        System.out.println(bob.countPossibleToProlongDeposit());
+        System.out.println(bob.countProlong());
     }
 }
 class BaseDeposit extends Deposit {
@@ -51,6 +58,9 @@ class BaseDeposit extends Deposit {
 
     public BaseDeposit(BigDecimal amount, Integer period) {
         super(amount, period);
+    }
+    public boolean canToProlong() {
+        return false;
     }
     @Override
     public BigDecimal income() {
@@ -65,14 +75,6 @@ class BaseDeposit extends Deposit {
     public BigDecimal getFinalDepositAmount() {
         BigDecimal finalAmount = amount;
         finalAmount = finalAmount.add(income());
-        return finalAmount;
-    }
-    @Override
-    public int compareTo(Deposit deposit) {
-        int finalAmount = 0;
-        if (deposit != null) {
-            finalAmount = getFinalDepositAmount().compareTo(deposit.getFinalDepositAmount());
-        }
         return finalAmount;
     }
 }
@@ -103,10 +105,6 @@ class SpecialDeposit extends Deposit implements Prolongable {
         finalAmount = finalAmount.add(income());
         return finalAmount;
     }
-    @Override
-    public int compareTo(Deposit deposit) {
-        return getFinalDepositAmount().compareTo(deposit.getFinalDepositAmount());
-    }
 }
 class LongDeposit extends Deposit implements Prolongable{
 
@@ -135,15 +133,11 @@ class LongDeposit extends Deposit implements Prolongable{
         finalAmount = finalAmount.add(income());
         return finalAmount;
     }
-    @Override
-    public int compareTo(Deposit deposit) {
-        return getFinalDepositAmount().compareTo(deposit.getFinalDepositAmount());
-    }
 }
-class Client implements Iterable<Deposit>{
+class Client implements Iterable<Deposit>, Comparator<Deposit>{
     private final Deposit[] depositsArray;
     private int nextCellIndex = 0;
-    private int count = 0;
+    private int numberOfClientDeposits = 0;
     public Client() {
         this.depositsArray = new Deposit[10];
     }
@@ -177,7 +171,7 @@ class Client implements Iterable<Deposit>{
         return maxIncome;
     }
     public BigDecimal getIncomeByNumber(Integer integer) {
-        var deposit = depositsArray[integer];                 // Deposit?
+        Deposit deposit = depositsArray[integer];
         if (deposit == null) {
             return BigDecimal.ZERO;
         }
@@ -185,20 +179,50 @@ class Client implements Iterable<Deposit>{
             return deposit.income();
         }
     }
+    public int countProlong() {
+        int count = 0;
+        for(Deposit dep: depositsArray) {
+            if (dep != null && dep.canToProlong()) {
+                count++;
+            }
+        }
+        return count;
+    }
     public void sortDeposit() {
-        Arrays.sort(depositsArray, Comparator.reverseOrder());
+        Arrays.sort(depositsArray, Comparator.nullsFirst(Comparator.reverseOrder()));
+    }
+
+    private <T> boolean isProlongable(T objects) { //how it works?
+        return objects instanceof Prolongable;
+    }
+    private boolean filterCanProlong(Deposit object) {
+        return((Prolongable) object).canToProlong();
+    }
+    public int countPossibleToProlongDeposit() {
+        return (int) Arrays.stream(depositsArray)
+                .filter(Objects::nonNull)
+                .filter(this::isProlongable)
+                .filter(this::filterCanProlong)
+                .count();
+        }
+
+    @Override
+    public int compare(Deposit dep1, Deposit dep2) {
+        return dep1.getFinalDepositAmount().compareTo(dep2.getFinalDepositAmount());
     }
     @Override
     public Iterator<Deposit> iterator() {
         return new DepositIterator();
     }
     class DepositIterator implements Iterator<Deposit> {
+        private String noDeposit = "There are no deposits left";
         private int index = 0;
         public boolean hasNext() {
             return index < depositsArray.length;
         }
         public Deposit next() {
-            return depositsArray[index++];
+            if(hasNext())  return depositsArray[index++];
+            else throw new NoSuchElementException(noDeposit);
         }
     }
 }
